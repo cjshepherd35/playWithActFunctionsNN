@@ -1,6 +1,7 @@
 import numpy as np
 import math
 np.random.seed(0)
+from scipy import signal
 ############################
 #using multiple activation functions per layer doesn't work...
 e = math.e
@@ -27,6 +28,46 @@ class Layer_Dense:
         #gradient on inputs
         self.dinputs = np.dot(dvalues, self.weights.T)
 
+
+
+
+class Convolutional:
+    def __init__(self, input_shape, kernel_size, depth):
+        num_batch, input_depth, input_height, input_width = input_shape
+        self.depth = depth
+        self.numbatch = num_batch
+        self.input_shape = input_shape
+        self.input_depth = input_depth
+        self.output_shape = (num_batch, depth, input_height - kernel_size + 1, input_width - kernel_size + 1)
+        self.kernels_shape = (num_batch, depth, kernel_size, kernel_size)
+        self.weights = np.random.randn(*self.kernels_shape)
+        self.biases = np.random.randn(*self.output_shape)
+
+    def forward(self, input):
+        self.input = input
+        self.output = np.zeros_like(self.biases)
+        for l in range(self.numbatch):
+            for i in range(self.depth):
+                # print(self.input[l].shape)
+                # print(self.weights[l,i].shape)
+                self.output[l, i] += signal.correlate2d(self.input[l], self.weights[l, i], "valid")
+        self.output += self.biases
+
+    def backward(self, output_gradient):
+        self.dweights = np.zeros(self.kernels_shape)
+        self.dinput = np.zeros(self.input_shape)
+
+        for i in range(self.numbatch):
+            for j in range(self.depth):
+                # print(self.input[i].shape)
+                # print(output_gradient[j].shape)
+                self.dweights[i, j] = signal.correlate2d(self.input[i], output_gradient[i,j], "valid")
+                self.dinput[i] += signal.convolve2d(output_gradient[i,j], self.weights[i, j], "full")
+        self.dbiases = output_gradient
+
+
+
+
 class Sigmoid:
     def forward(self, x):
         self.output =  1 / (1 + np.exp(-x))
@@ -34,6 +75,8 @@ class Sigmoid:
     def backward(self,dvalues):
         s = 1 / (1 + np.exp(-np.clip(dvalues,1e-4,1e2)))
         self.dinputs =  s * (1 - s)
+
+
 class Reshape:
     def __init__(self, input_shape, output_shape):
         self.input_shape = input_shape
@@ -106,7 +149,7 @@ class Loss_categoricalCrossentropy(Loss):
     def backward(self, dvalues, y_true):
         #num samples
         samples = len(dvalues)
-        #number of labels in every sample, we'll use the first sample to count them
+        #number of labels in every sample, we'll use the first sameple to count them
         labels = len(dvalues[0])
 
         #if labels are sparse, turn them into one-hot vector
@@ -157,34 +200,3 @@ class Optimizer_SGD:
     def update_params(self, layer):
         layer.weights -= self.learning_rate * layer.dweights
         layer.biases -= self.learning_rate * layer.dbiases 
-
-
-class Activation_Fouriersins:
-
-    def forward(self, inputs):
-        self.output = []
-        for i in range(len(inputs)):
-            self.output.append(np.sin(i*inputs[i]))
-        self.output = np.array(self.output)
-
-    def backward(self, dvalues):
-        self.dinputs = []
-        for i in range(len(dvalues)):
-            self.dinputs.append(np.cos(i*dvalues[i]))
-        self.dinputs = np.array(self.dinputs)
-
-
-
-class Activation_Fouriercos:
-
-    def forward(self, inputs):
-        self.output = []
-        for i in range(len(inputs)):
-            self.output.append(np.cos(i*inputs[i]))
-        self.output = np.array(self.output)
-
-    def backward(self, dvalues):
-        self.dinputs = []
-        for i in range(len(dvalues)):
-            self.dinputs.append(-np.sin(i*dvalues[i]))
-        self.dinputs = np.array(self.dinputs)
